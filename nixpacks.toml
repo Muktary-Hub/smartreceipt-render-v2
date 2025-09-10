@@ -1,0 +1,10 @@
+[phases.setup]
+aptPkgs = [
+    # Puppeteer dependencies
+    'libnss3', 'libatk1.0-0', 'libatk-bridge2.0-0', 'libcups2', 
+    'libgtk-3-0', 'libgbm-dev', 'libxss1', 'libasound2t64', 'libxshmfence1',
+    # Canvas dependencies
+    'build-essential', 'libcairo2-dev', 'libpango1.0-dev', 'libjpeg-dev', 
+    'libgif-dev', 'librsvg2-dev'
+]
+
