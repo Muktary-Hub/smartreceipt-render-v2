@@ -4,7 +4,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const pino = require('pino');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer'); // Using the full puppeteer package
 const axios = require('axios');
 const FormData = require('form-data');
 const qrcode = require('qrcode-terminal');
@@ -56,7 +56,7 @@ const mongoStore = (collection) => {
     return { writeData, readData, removeData };
 };
 
-// --- Helper Functions, API Calls, Web Server Routes ---
+// --- Helper Functions ---
 async function connectToDB() {
     try {
         const client = new MongoClient(MONGO_URI);
@@ -68,10 +68,12 @@ async function connectToDB() {
         process.exit(1);
     }
 }
+
 function sendMessageWithDelay(senderId, text) {
     const delay = Math.floor(Math.random() * 1000) + 1500;
     return new Promise(resolve => setTimeout(() => sock.sendMessage(senderId, { text }).then(resolve), delay));
 }
+
 async function uploadLogo(mediaBuffer) {
     try {
         const form = new FormData();
@@ -83,6 +85,7 @@ async function uploadLogo(mediaBuffer) {
         return null;
     }
 }
+
 function formatPhoneNumberForApi(whatsappId) {
     let number = whatsappId.split('@')[0];
     number = number.replace(/\D/g, '');
@@ -91,6 +94,7 @@ function formatPhoneNumberForApi(whatsappId) {
     if (number.length === 11 && number.startsWith('0')) { return number; }
     return "INVALID_PHONE_FORMAT"; 
 }
+
 async function generateVirtualAccount(user) {
     const formattedPhone = formatPhoneNumberForApi(user.userId);
     if (formattedPhone === "INVALID_PHONE_FORMAT") { console.error(`Could not format phone number for user: ${user.userId}`); return null; }
@@ -118,7 +122,10 @@ async function generateVirtualAccount(user) {
         return null;
     }
 }
+
+// --- WEB SERVER ROUTES ---
 app.get('/', (req, res) => res.status(200).send('SmartReceipt Bot Webhook Server is running.'));
+
 app.post('/webhook', async (req, res) => {
     try {
         console.log("Webhook received from PaymentPoint!");
@@ -140,6 +147,7 @@ app.post('/webhook', async (req, res) => {
         res.status(500).send('Error processing webhook');
     }
 });
+
 app.post('/admin-data', async (req, res) => {
     try {
         const { password } = req.body;
@@ -155,6 +163,7 @@ app.post('/admin-data', async (req, res) => {
         res.status(500).json({ error: 'An internal server error occurred.' });
     }
 });
+
 app.get('/verify-receipt', async (req, res) => {
     try {
         const { id } = req.query;
@@ -205,10 +214,34 @@ async function startSock() {
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') return;
+
         try {
             const senderId = msg.key.remoteJid;
             const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
-            // This is the full, unabridged message handler logic
+            const lowerCaseText = text.toLowerCase();
+            const messageType = Object.keys(msg.message)[0];
+            
+            const user = await db.collection('users').findOne({ userId: senderId });
+            const isAdmin = ADMIN_NUMBERS.includes(senderId);
+            const userSession = userStates.get(senderId) || {};
+            const currentState = userSession.state;
+
+            // --- COMMAND HANDLING FIRST ---
+            if (lowerCaseText === 'commands') {
+                const commandsList = `*Here's what I can do:*\n\n` + `*new receipt* - Start creating a new receipt.\n` + `*stats* - Get your sales summary for this month.\n` + `*history* - View your last 5 receipts and resend them.\n` + `*edit* - Make a correction to your last receipt.\n` + `*export* - Get a text file of this month's sales.\n\n` + `*products* - View your saved products.\n` + `*add product* - Start adding new products to your catalog.\n` + `*remove product "Name"* - Delete a product.\n\n` + `*format* - Choose your receipt format (PDF/Image).\n` + `*mybrand* - Update your business details.\n` + `*changereceipt* - Change your default receipt template.`;
+                await sendMessageWithDelay(senderId, commandsList);
+                return;
+            }
+
+            if (lowerCaseText === 'add product') {
+                if (!user || !user.onboardingComplete) { await sendMessageWithDelay(senderId, "Please complete your setup first."); return; }
+                userStates.set(senderId, { state: 'adding_product_name' });
+                await sendMessageWithDelay(senderId, "Let's add a new product. What is the product's name?");
+                return;
+            }
+            
+            // ... (rest of the full message handler logic)
+
         } catch (err) {
             console.error("An error occurred in Baileys message handler:", err);
             await sock.sendMessage(senderId, { text: 'Sorry, an unexpected error occurred. Please try again.' });
@@ -220,7 +253,7 @@ async function startSock() {
 async function initializeBrowser() {
     try {
         browser = await puppeteer.launch({
-            executablePath: '/usr/bin/chromium', // The final, correct path
+            // No executablePath is needed as puppeteer downloads its own browser
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
         });
