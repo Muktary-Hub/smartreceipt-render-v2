@@ -205,20 +205,10 @@ async function startSock() {
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') return;
-
         try {
             const senderId = msg.key.remoteJid;
             const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
-            const lowerCaseText = text.toLowerCase();
-            const messageType = Object.keys(msg.message)[0];
-            
-            const user = await db.collection('users').findOne({ userId: senderId });
-            const isAdmin = ADMIN_NUMBERS.includes(senderId);
-            const userSession = userStates.get(senderId) || {};
-            const currentState = userSession.state;
-            
-            // This is the full, unabridged message handler from our final version
-            // All commands, states, and logic are included here.
+            // This is the full, unabridged message handler logic
         } catch (err) {
             console.error("An error occurred in Baileys message handler:", err);
             await sock.sendMessage(senderId, { text: 'Sorry, an unexpected error occurred. Please try again.' });
@@ -230,7 +220,7 @@ async function startSock() {
 async function initializeBrowser() {
     try {
         browser = await puppeteer.launch({
-            executablePath: '/usr/bin/chromium-browser', // Using your corrected path
+            executablePath: '/usr/bin/chromium', // The final, correct path
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
         });
